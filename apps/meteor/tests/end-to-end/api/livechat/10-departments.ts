@@ -1,5 +1,6 @@
 import { faker } from '@faker-js/faker';
-import type { ILivechatDepartment } from '@rocket.chat/core-typings';
+import type { Credentials } from '@rocket.chat/api-client';
+import type { ILivechatDepartment, IUser } from '@rocket.chat/core-typings';
 import { expect } from 'chai';
 import { before, describe, it, after } from 'mocha';
 import type { Response } from 'supertest';
@@ -15,8 +16,9 @@ import {
 	getLivechatRoomInfo,
 } from '../../../data/livechat/rooms';
 import { createMonitor, createUnit } from '../../../data/livechat/units';
-import { restorePermissionToRoles, updatePermission, updateSetting } from '../../../data/permissions.helper';
-import { createUser, deleteUser } from '../../../data/users.helper';
+import { restorePermissionToRoles, updateEESetting, updatePermission, updateSetting } from '../../../data/permissions.helper';
+import { password } from '../../../data/user';
+import { createUser, deleteUser, login } from '../../../data/users.helper';
 import { IS_EE } from '../../../e2e/config/constants';
 
 (IS_EE ? describe.skip : describe)('LIVECHAT - Departments[CE]', () => {
@@ -43,6 +45,7 @@ import { IS_EE } from '../../../e2e/config/constants';
 
 	after(async () => {
 		await deleteDepartment(departmentId);
+		await updateSetting('Omnichannel_enable_department_removal', false);
 	});
 
 	it('should create a new department', async () => {
@@ -100,6 +103,10 @@ import { IS_EE } from '../../../e2e/config/constants';
 		await createAgent();
 		await makeAgentAvailable();
 		await updateSetting('Omnichannel_enable_department_removal', true);
+	});
+
+	after(async () => {
+		await updateSetting('Omnichannel_enable_department_removal', false);
 	});
 
 	describe('GET livechat/department', () => {
@@ -453,6 +460,28 @@ import { IS_EE } from '../../../e2e/config/constants';
 	});
 
 	describe('DELETE livechat/department/:_id', () => {
+		describe('With setting disabled', () => {
+			before(async () => {
+				await updateSetting('Omnichannel_enable_department_removal', false);
+			});
+			after(async () => {
+				await updateSetting('Omnichannel_enable_department_removal', true);
+			});
+
+			it('should not allow to remove a department if setting is disabled', async () => {
+				const department = await createDepartment();
+				await request
+					.delete(api(`livechat/department/${department._id}`))
+					.set(credentials)
+					.expect('Content-Type', 'application/json')
+					.expect(400)
+					.expect((res: Response) => {
+						expect(res.body).to.have.property('success', false);
+						expect(res.body).to.have.property('error', 'error-department-removal-disabled');
+					});
+			});
+		});
+
 		it('should return unauthorized error when the user does not have the necessary permission', async () => {
 			await updatePermission('manage-livechat-departments', []);
 			await updatePermission('remove-livechat-department', []);
@@ -890,6 +919,46 @@ import { IS_EE } from '../../../e2e/config/constants';
 				.post(api(`livechat/department/${departmentForTest._id}/unarchive`))
 				.set(credentials)
 				.expect(200);
+		});
+	});
+
+	describe('With multiple bussines hours', () => {
+		before(async () =>
+			Promise.all([updateEESetting('Livechat_enable_business_hours', true), updateEESetting('Livechat_business_hour_type', 'Multiple')]),
+		);
+		after(async () =>
+			Promise.all([updateEESetting('Livechat_enable_business_hours', false), updateEESetting('Livechat_business_hour_type', 'Single')]),
+		);
+
+		let testUser: { user: IUser; credentials: Credentials };
+		let testDepartment: ILivechatDepartment;
+		before(async () => {
+			const user = await createUser();
+			await createAgent(user.username);
+			const credentials3 = await login(user.username, password);
+			await makeAgentAvailable(credentials3);
+
+			testUser = {
+				user,
+				credentials: credentials3,
+			};
+		});
+
+		before(async () => {
+			testDepartment = await createDepartment([{ agentId: testUser.user._id }], `${new Date().toISOString()}-department`, true);
+		});
+
+		after(async () => {
+			await Promise.all([deleteUser(testUser.user), deleteDepartment(testDepartment._id)]);
+		});
+
+		it('should allow to remove an agent from a department when multiple business hours are enabled', async () => {
+			const res = await request
+				.post(api(`livechat/department/${testDepartment._id}/agents`))
+				.set(credentials)
+				.send({ upsert: [], remove: [{ agentId: testUser.user._id, username: testUser.user.username }] })
+				.expect(200);
+			expect(res.body).to.have.property('success', true);
 		});
 	});
 });
