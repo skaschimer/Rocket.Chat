@@ -1,7 +1,7 @@
 import type { PaginatedMultiSelectOption } from '@rocket.chat/fuselage';
 import { PaginatedMultiSelectFiltered } from '@rocket.chat/fuselage';
 import { useDebouncedValue } from '@rocket.chat/fuselage-hooks';
-import React, { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useRecordList } from '../../hooks/lists/useRecordList';
@@ -9,6 +9,7 @@ import { AsyncStatePhase } from '../../hooks/useAsyncState';
 import { useTagsList } from '../../hooks/useTagsList';
 
 type AutoCompleteTagsMultipleProps = {
+	id?: string;
 	value?: PaginatedMultiSelectOption[];
 	onlyMyTags?: boolean;
 	onChange?: (value: PaginatedMultiSelectOption[]) => void;
@@ -17,6 +18,7 @@ type AutoCompleteTagsMultipleProps = {
 };
 
 const AutoCompleteTagsMultiple = ({
+	id,
 	value = [],
 	onlyMyTags = false,
 	onChange = () => undefined,
@@ -44,6 +46,7 @@ const AutoCompleteTagsMultiple = ({
 
 	return (
 		<PaginatedMultiSelectFiltered
+			id={id}
 			withTitle
 			value={value}
 			onChange={onChange}

@@ -6,15 +6,16 @@ import {
 	isGETOmnichannelContactHistoryProps,
 	isGETOmnichannelContactsChannelsProps,
 	isGETOmnichannelContactsSearchProps,
+	isGETOmnichannelContactsCheckExistenceProps,
 } from '@rocket.chat/rest-typings';
 import { escapeRegExp } from '@rocket.chat/string-helpers';
+import { removeEmpty } from '@rocket.chat/tools';
 import { Match, check } from 'meteor/check';
 import { Meteor } from 'meteor/meteor';
 
 import { API } from '../../../../api/server';
 import { getPaginationItems } from '../../../../api/server/helpers/getPaginationItems';
 import { createContact } from '../../lib/contacts/createContact';
-import { getContactByChannel } from '../../lib/contacts/getContactByChannel';
 import { getContactChannelsGrouped } from '../../lib/contacts/getContactChannelsGrouped';
 import { getContactHistory } from '../../lib/contacts/getContactHistory';
 import { getContacts } from '../../lib/contacts/getContacts';
@@ -121,7 +122,7 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['update-livechat-contact'], validateParams: isPOSTUpdateOmnichannelContactsProps },
 	{
 		async post() {
-			const contact = await updateContact({ ...this.bodyParams });
+			const contact = await updateContact(removeEmpty(this.bodyParams));
 
 			return API.v1.success({ contact });
 		},
@@ -133,13 +134,13 @@ API.v1.addRoute(
 	{ authRequired: true, permissionsRequired: ['view-livechat-contact'], validateParams: isGETOmnichannelContactsProps },
 	{
 		async get() {
-			const { contactId, visitor } = this.queryParams;
+			const { contactId } = this.queryParams;
 
-			if (!contactId && !visitor) {
+			if (!contactId) {
 				return API.v1.notFound();
 			}
 
-			const contact = await (contactId ? LivechatContacts.findOneById(contactId) : getContactByChannel(visitor));
+			const contact = await LivechatContacts.findOneById(contactId);
 
 			if (!contact) {
 				return API.v1.notFound();
@@ -162,6 +163,20 @@ API.v1.addRoute(
 			const result = await getContacts({ ...query, offset, count, sort });
 
 			return API.v1.success(result);
+		},
+	},
+);
+
+API.v1.addRoute(
+	'omnichannel/contacts.checkExistence',
+	{ authRequired: true, permissionsRequired: ['view-livechat-contact'], validateParams: isGETOmnichannelContactsCheckExistenceProps },
+	{
+		async get() {
+			const { contactId, email, phone } = this.queryParams;
+
+			const contact = await LivechatContacts.countByContactInfo({ contactId, email, phone });
+
+			return API.v1.success({ exists: contact > 0 });
 		},
 	},
 );

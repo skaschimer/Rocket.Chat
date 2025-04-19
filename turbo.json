@@ -46,13 +46,8 @@
 		},
 		"@rocket.chat/meteor#build:ci": {
 			"dependsOn": ["^build"],
+			"env": ["BABEL_ENV"],
 			"cache": false
-		},
-
-		"@rocket.chat/ddp-streamer#build": {
-			"dependsOn": ["^build"],
-			"outputs": ["dist/**"],
-			"inputs": ["../../../apps/meteor/server/**", "./src/**"]
 		}
 	}
 }
